@@ -31,7 +31,7 @@ print(data)
 import pyiris
 from pyiris.cursor import DictCursor
 
-conn = pyiris.Connection(host="", port=5050, user="foo", password="bar", database="foo", cursor_class=DictCursor)
+conn = pyiris.Connection(host="", port=5050, user="foo", password="bar", database="foo", cursor_class_=DictCursor)
 cursor = conn.cursor()
 cursor.execute("SELECT 1 AS no FROM my_table")
 data = cursor.fetchall()
