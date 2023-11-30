@@ -111,7 +111,7 @@ class Connection() :
             self.cursor_._login(self.user, self.password, VERSION)
 
         if self.database:
-            self.cursor_.execute2(f"use {self.database};")
+            self.cursor_.execute(f"use {self.database};")
 
         return self.cursor_
 
