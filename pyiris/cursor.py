@@ -3,8 +3,10 @@ import base64
 import time
 import json
 
-from typing import Union, List, Tuple, Optional, Dict, Any
-from overrides import overrides
+from typing import (
+    Union, List, Tuple, 
+    Optional, Dict, Any, Iterable
+)
 
 from .iris_socket import IRISSocket
 from .load import LoadOption
@@ -14,18 +16,23 @@ from .error import (
     DataError, 
     InternalError
 )
+import logging
 
+logger = logging.getLogger(__name__)
 
 class Cursor():
+    """
+    IRIS DB Cursor
+    """
+
     record_sep:str = ''
     field_sep:str = ''
+
     def __init__(
             self, 
-            socket:IRISSocket, 
-            debug_mode_enabled:bool=False):
+            socket:IRISSocket):
         self.is_initial_execution = False
         self.socket = socket
-        self.debug_mode_enabled = debug_mode_enabled
 
         self.buffer:list = []
         self.process_status:str = ""
@@ -45,32 +52,29 @@ class Cursor():
         self.socket.set_timeout(timeout)
         
     def _set_info(self, user:str, password:str, host:str, library_version:str) -> None:
-        if self.debug_mode_enabled:
-            debug_start_time = time.time()
+        debug_start_time = time.time()
 
         param = f"{user},{password},{host},{library_version}"
         encoded_param = base64.b64encode(param.encode('utf-8')).decode('utf-8')
-        send_msg = f"SETINFO {encoded_param}\r\n"
 
         # send SETINFO command
-        self.socket.send_message(send_msg)
+        self.socket.send_message(f"SETINFO {encoded_param}\r\n")
 
         # result message from UDM
         is_success, msg = self.socket.read_message()
         if not is_success: 
             raise OperationalError(msg)
 
-        if self.debug_mode_enabled:
-            debug_end_time = time.time()
-            print("[DEBUG_TIME] SetInfo() %f" % (debug_end_time - debug_start_time))
+        debug_end_time = time.time()
+        logger.debug("[DEBUG_TIME] SetInfo() %f" % (debug_end_time - debug_start_time))
 
 
     def set_buffer_size(self, size:int):
         self.buffer_size = size
 
+
     def _login(self, user:str, password:str, library_version:str) -> None:
-        if self.debug_mode_enabled:
-            debug_start_time = time.time()
+        debug_start_time = time.time()
 
         param = f"{user},{password},{library_version}"
         encoded_param = base64.b64encode(param.encode('utf-8')).decode('utf-8')
@@ -81,56 +85,63 @@ class Cursor():
 
         # welcome message from PGD
         is_success, msg = self.socket.read_message()
-        if not is_success: raise OperationalError(msg)
+        if not is_success: 
+            raise OperationalError(msg)
 
         # welcome message from UDM
         is_success, msg = self.socket.read_message()
-        if not is_success: raise OperationalError(msg)
+        if not is_success: 
+            raise OperationalError(msg)
 
-        if self.debug_mode_enabled:
-            debug_end_time = time.time()
-            print("[DEBUG_TIME] Login() %f" % (debug_end_time - debug_start_time))
+        debug_end_time = time.time()
+        logger.debug("[DEBUG_TIME] Login() %f" % (debug_end_time - debug_start_time))
+
 
     def _set_field_sep(self, sep:str) -> None:
-        if self.debug_mode_enabled:
-            debug_start_time = time.time()
+        """
+        Set Field seperator on Transaction
+        """
+        debug_start_time = time.time()
         encoded_sep = base64.b64encode(sep.encode('utf-8')).decode('utf-8')
         send_msg = f'SET_FIELD_SEP {encoded_sep}\r\n'
         self.socket.send_message(send_msg)
         is_success, msg = self.socket.read_message()
-        if not is_success: raise DataError(msg)
+        if not is_success: 
+            raise DataError(msg)
 
         self.field_sep = sep
 
-        if self.debug_mode_enabled:
-            debug_end_time = time.time()
-            print("[DEBUG_TIME] SetFieldSep() %f" % (debug_end_time - debug_start_time))
+        debug_end_time = time.time()
+        logger.debug("[DEBUG_TIME] SetFieldSep() %f" % (debug_end_time - debug_start_time))
 
 
     def _set_record_sep(self, sep:str) -> None:
-        if self.debug_mode_enabled:
-            debug_start_time = time.time()
+        """
+        Set Record seperator on Transaction
+        """
+        debug_start_time = time.time()
         
         encoded_sep = base64.b64encode(sep.encode('utf-8')).decode('utf-8')
         send_msg = f"SET_RECORD_SEP {encoded_sep}\r\n"
         self.socket.send_message(send_msg)
         is_success, msg = self.socket.read_message()
-        if not is_success: raise DataError(msg)
+        if not is_success: 
+            raise DataError(msg)
         self.record_sep = sep
 
-        if self.debug_mode_enabled:
-            debug_end_time = time.time()
-            print("[DEBUG_TIME] SetRecordSep() %f" % (debug_end_time - debug_start_time))
+        debug_end_time = time.time()
+        logger.debug("[DEBUG_TIME] SetRecordSep() %f" % (debug_end_time - debug_start_time))
 
     
     def _get_description(self) -> List[Tuple[Optional[str]]]:
         """
         name, type_code, display_size, internal_size, precision, scale, null_ok
         """
-        sendMsg = "METADATA\r\n"
-        self.socket.send_message(sendMsg)
+        self.socket.send_message("METADATA\r\n")
         is_success, msg = self.socket.read_message()
-        if not is_success: raise InternalError(msg)
+        if not is_success: 
+            raise InternalError(msg)
+        
         size = int(msg.strip())
         meta = []
         if size:
@@ -171,50 +182,45 @@ class Cursor():
             Result Message
         """
         self.has_next = False
-        if self.debug_mode_enabled:
-            debug_start_time = time.time()
+        debug_start_time = time.time()
+
         if not operation.endswith(';'):
             operation += ';'
 
         sql_size = len(operation.encode('utf-8'))
-
-        send_msg = f"EXECUTE2 {sql_size}\r\n{operation}"
-        self.socket.send_message(send_msg)
+        self.socket.send_message(f"EXECUTE2 {sql_size}\r\n{operation}")
 
         is_success, msg = self.socket.read_message()
-        if not is_success: raise ProgrammingError(msg)
-        self.is_initial_execution = False
-
-        if self.debug_mode_enabled:
-            debug_end_time = time.time()
-            print("[DEBUG_TIME] Execute2() %f" % (debug_end_time - debug_start_time))
-
+        if not is_success: 
+            raise ProgrammingError(msg)
+        
         self.description = self._get_description()
+        self.is_initial_execution = False
+        
+        debug_end_time = time.time()
+        logger.debug("[DEBUG_TIME] Execute2() %f" % (debug_end_time - debug_start_time))
 
         return msg
 
     def execute1(self, operation:str) -> None:
         self.has_next = False
         self.is_initial_execution = False
-        if self.debug_mode_enabled:
-            debug_start_time = time.time()
+        debug_start_time = time.time()
 
         operation = self._check_semi(operation)
         sql_size = len(operation)
 
-        sendMsg = f"EXECUTE {sql_size}\r\n{operation}"
-        self.socket.send_message(sendMsg)
+        self.socket.send_message(f"EXECUTE {sql_size}\r\n{operation}")
         self.is_initial_execution = True
-
-        if self.debug_mode_enabled:
-            debug_end_time = time.time()
-            print("[DEBUG_TIME] Execute() %f" % (debug_end_time - debug_start_time))
-        
         self.description = self._get_description()
 
+        
+        debug_end_time = time.time()
+        logger.debug("[DEBUG_TIME] Execute() %f" % (debug_end_time - debug_start_time))
+        
+
     def _read_data(self) :
-        if self.debug_mode_enabled:
-            debug_start_time = time.time()
+        debug_start_time = time.time()
 
         if not self.is_initial_execution : 
             self.socket.send_message("CONT\r\n")
@@ -228,19 +234,18 @@ class Cursor():
         if "+OK" == tag :
             self.has_next = True
             raise StopIteration()
-        if "-" == tag[0] : raise OperationalError(param)
+        if "-" == tag[0] : 
+            raise OperationalError(param)
 
         data = self.socket.read(int(param))
         self.buffer = json.loads(data)
 
-        if self.debug_mode_enabled:
-            debug_end_time = time.time()
-            print("[DEBUG_TIME] ReadData() %f" % (debug_end_time - debug_start_time))
+        debug_end_time = time.time()
+        logger.debug("[DEBUG_TIME] ReadData() %f" % (debug_end_time - debug_start_time))
 
 
     def fetchall(self): 
-        if self.debug_mode_enabled:
-            debug_start_time = time.time()
+        debug_start_time = time.time()
 
         if not self.is_initial_execution : 
             self.socket.send_message("CONT ALL\r\n")
@@ -250,8 +255,10 @@ class Cursor():
         tmp_list = []
         while True:
             msg = self.socket.readline()
-            try: (tag, param) = msg.strip().split(" ", 1) 
-            except: tag = msg.strip()
+            try: 
+                tag, param = msg.strip().split(" ", 1) 
+            except: 
+                tag = msg.strip()
 
             if "+OK" == tag:
                 break
@@ -259,12 +266,10 @@ class Cursor():
                 raise OperationalError(param)
 
             tmp_list += json.loads(self.socket.read(int(param)))
-
             self.socket.send_message("CONT ALL\r\n")
 
-        if self.debug_mode_enabled:
-            debug_end_time = time.time()
-            print("[DEBUG_TIME] Fetchall() %f" % (debug_end_time - debug_start_time))
+        debug_end_time = time.time()
+        logger.debug("[DEBUG_TIME] Fetchall() %f" % (debug_end_time - debug_start_time))
 
         return tmp_list
 
@@ -274,18 +279,13 @@ class Cursor():
             self._read_data()
         record = self.buffer.pop(0)
         return record
-    
-
-    def _logger(self, msg):
-        if self.debug_mode_enabled:
-            print(msg)
 
 
     def load(
             self, 
             table:str, 
             load_file_path:str, 
-            columns:List[str], 
+            columns:Iterable[str], 
             key:str="",
             partition:str="",
             sep:str=",",
@@ -300,11 +300,11 @@ class Cursor():
         )
 
         if not os.path.exists(load_file_path):
-            raise DataError("-ERR dat is invalid.\r\n")
+            raise DataError("-ERR file does not exist")
 
         # check control file is exists when normal loading.
         if not load_option.validate_csv and columns is None:
-            raise DataError("-ERR ctl file doesn't exist.\r\n")
+            raise DataError("-ERR column is not iterable type.\r\n")
 
         if columns:
             control_data = self.record_sep.join(columns)
@@ -316,9 +316,9 @@ class Cursor():
         self._set_field_sep(sep)
         self._set_record_sep(record_sep)
 
-        self._logger(f"[DEBUG] GetSizeStart ({load_file_path})")
+        logger.debug(f"[DEBUG] GetSizeStart ({load_file_path})")
         data_size = os.path.getsize(load_file_path)
-        self._logger("[DEBUG] GetSizeEnd")
+        logger.debug("[DEBUG] GetSizeEnd")
 
         send_msg = f"IMPORT {table},{key},{partition},{ctl_size},{data_size},{load_option}\r\n"
 
@@ -326,14 +326,14 @@ class Cursor():
         self.socket.send_message(control_data)
 
         with open(load_file_path, newline='') as load_file:
-            self._logger("[DEBUG] OpenFile (%s)" % load_file_path)
+            logger.debug("[DEBUG] OpenFile (%s)" % load_file_path)
             while True :
                 buffer_data = load_file.read(self.buffer_size)
                 if not buffer_data:
                     break #EOF
                 self.socket.send_message(buffer_data)
 
-            self._logger("[DEBUG] End (%s)" % load_file_path)
+            logger.debug("[DEBUG] End (%s)" % load_file_path)
 
 
     def close(self):
@@ -351,14 +351,16 @@ class Cursor():
 
 
 class DictCursor(Cursor):
+    """
+    Dict Cursor
 
-    def __init__(
-            self, 
-            socket:IRISSocket, 
-            debug_mode_enabled:bool=False):
-        super().__init__(socket, debug_mode_enabled)
+    반환 결과가 tuple(혹은 list) 가 아닌 dictionary 형태
+    """
 
-    @overrides
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+
+    # override
     def fetchall(self) -> Tuple[Dict[str, Any]]:
         datas = super().fetchall()
         result = []
@@ -367,10 +369,9 @@ class DictCursor(Cursor):
 
         return result
     
-    @overrides
+    # override
     def fetchone(self) -> tuple:
         data = super().fetchone()
-        
         return self._map_column(data)
     
     def _map_column(self, data:tuple) -> dict:

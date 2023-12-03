@@ -1,8 +1,13 @@
 import time
-from typing import Tuple, Union, Optional, Type
+from typing import (
+    Tuple, Union, Optional, Type
+)
 from .cursor import Cursor
 from .iris_socket import IRISSocket
 from .error import OperationalError
+import logging
+
+logger = logging.getLogger(__name__)
 
 VERSION = "Python-M6-API-2.1"
 DEFAULT_CURSOR = Cursor
@@ -21,7 +26,6 @@ class Connection() :
             database:Optional[str] = None,
             port:int = 0,
             direct_mode_enabled:bool = False, 
-            debug_mode_enabled:bool = False, 
             timeout:Union[int,float] = 0,
             cursor_class_:Type[Cursor] = DEFAULT_CURSOR
         ) -> None:
@@ -30,7 +34,6 @@ class Connection() :
         self.user = user or ""
         self.password = password  or ""
         self.direct_mode_enabled = direct_mode_enabled
-        self.debug_mode_enabled = debug_mode_enabled
         self.timeout = timeout or 0
         self.database = database
         self.cursor_class_ = cursor_class_
@@ -46,8 +49,7 @@ class Connection() :
 
     def _connect(self) -> None:
         """Connect to Server"""
-        if self.debug_mode_enabled:
-            debugStartTime = time.time()
+        debugStartTime = time.time()
 
         self._connect_server(self.host, self.port)
 
@@ -55,13 +57,15 @@ class Connection() :
             udm_ip, udm_port = self._nsd_connect()
             self._connect_server(udm_ip, udm_port)
 
-        if self.debug_mode_enabled:
-            debugEndTime = time.time()
-            print("[DEBUG_TIME] Connect() %f") % (debugEndTime - debugStartTime)
+        debugEndTime = time.time()
+        logger.debug("[DEBUG_TIME] Connect() %f") % (debugEndTime - debugStartTime)
+        
 
     def _connect_server(self, host:str, port:int) -> None:
         """Connect to Server"""
-        if not self.socket : self.socket = IRISSocket()
+        if not self.socket : 
+            self.socket = IRISSocket()
+
         if self.timeout > 0:
             self.socket.set_timeout(self.timeout)
 
@@ -90,6 +94,7 @@ class Connection() :
         port = int(msg.strip().split(":", 1)[1])
 
         self.socket.send_message("QUIT\r\n")
+
         try: self.socket.readline() # NSD : OK BYE
         except: pass
         try: self.socket.close()
@@ -99,10 +104,7 @@ class Connection() :
 
 
     def cursor(self) -> Cursor:
-        self.cursor_ = self.cursor_class_(
-            socket=self.socket, 
-            debug_mode_enabled=self.debug_mode_enabled
-        )
+        self.cursor_ = self.cursor_class_(socket=self.socket)
 
         if self.direct_mode_enabled:
             host = self.socket.socket.getsockname()[0]
@@ -111,7 +113,7 @@ class Connection() :
             self.cursor_._login(self.user, self.password, VERSION)
 
         if self.database:
-            self.cursor_.execute(f"use {self.database};")
+            self.cursor_.execute(f"USE {self.database};")
 
         return self.cursor_
 
