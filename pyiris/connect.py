@@ -58,7 +58,7 @@ class Connection() :
             self._connect_server(udm_ip, udm_port)
 
         debugEndTime = time.time()
-        logger.debug("[DEBUG_TIME] Connect() %f") % (debugEndTime - debugStartTime)
+        logger.debug("[DEBUG_TIME] Connect() %f" % (debugEndTime - debugStartTime))
         
 
     def _connect_server(self, host:str, port:int) -> None:

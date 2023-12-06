@@ -259,7 +259,10 @@ class IRISSocket():
         """
         SUCCESS_CODE = "+"
         line = self.readline()
-        code, msg = line.split(" ", 1)
+        if " " in line:
+            code, msg = line.split(" ", 1)
+        else:
+            code, msg = line, ''
         if code[0] == SUCCESS_CODE:
             return True, msg
         return False, msg

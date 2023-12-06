@@ -5,11 +5,12 @@ import json
 
 from typing import (
     Union, List, Tuple, 
-    Optional, Dict, Any, Iterable
+    Optional, Dict, Any, Sequence
 )
 
 from .iris_socket import IRISSocket
 from .load import LoadOption
+from .converter import convert
 from .error import (
     OperationalError, 
     ProgrammingError, 
@@ -167,14 +168,39 @@ class Cursor():
         return sql
     
 
-    def execute(self, operation:str) -> str:
+    def _convert_params(self, args) -> Any:
+        if isinstance(args, (tuple, list)):
+            params = tuple([convert(a) for a in args])
+        elif isinstance(args, dict):
+            params = {k: convert(v) for k, v in args.items()}
+        else:
+            raise ProgrammingError("Not Supported argument type: %s" % type(args))
+        
+        return params
+    
+    def mogrify(
+            self, 
+            query:str, 
+            args:Optional[Union[Sequence[Any], Dict[str, Any]]]=None
+            ) -> str:
+        if args is not None:
+            params = self._convert_params(args)
+            query = query % params
+        
+        return query
+        
+
+    def execute(self, operation:str, args:Optional[Union[Sequence[Any], Dict[str,Any]]]=None) -> str:
         """
         Execute Query
 
         Params
         ------
         operation (str)
-            : Query
+            : Query. 파라미터가 필요한 경우 %s 혹은 %(key)s 형식으로 작성.
+
+        args (Optional[Union[Sequence[Any], Dict[str, Any]]])
+            : Query에 들어갈 파라미터.
 
         Return
         ------
@@ -183,6 +209,7 @@ class Cursor():
         """
         self.has_next = False
         debug_start_time = time.time()
+        operation = self.mogrify(operation, args)
 
         if not operation.endswith(';'):
             operation += ';'
@@ -285,7 +312,7 @@ class Cursor():
             self, 
             table:str, 
             load_file_path:str, 
-            columns:Iterable[str], 
+            columns:Sequence[str], 
             key:str="",
             partition:str="",
             sep:str=",",
