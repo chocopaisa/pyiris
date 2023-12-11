@@ -153,19 +153,12 @@ class Cursor():
         return meta
     
 
-    def _check_semi(self, sql:str) -> str:
-        chk_sql = sql.upper().strip()
-        if chk_sql.startswith("SELECT") \
-                or chk_sql.startswith("UPDATE") \
-                or chk_sql.startswith("INSERT") \
-                or chk_sql.startswith("DELETE") \
-                or chk_sql.startswith("CREATE") \
-                or chk_sql.startswith("DROP") \
-                or chk_sql.startswith("ALTER") \
-                or chk_sql.startswith("/*+"):
-            if not chk_sql.endswith(";"):
-                return sql + ";"
-        return sql
+    def _has_semicolon(self, sql:str) -> bool:
+        TARGET_COMMANDS = ("SELECT", "UPDATE", "INSERT", "DELETE", "CREATE", "DROP", "ALTER", "/*+")
+        sql = sql.upper().strip()
+        if sql.startswith(TARGET_COMMANDS) and not sql.endswith(";"):
+            return False
+        return True
     
 
     def _convert_params(self, args) -> Any:
@@ -211,9 +204,9 @@ class Cursor():
         debug_start_time = time.time()
         operation = self.mogrify(operation, args)
 
-        if not operation.endswith(';'):
+        if not self._has_semicolon(operation):
             operation += ';'
-
+            
         sql_size = len(operation.encode('utf-8'))
         self.socket.send_message(f"EXECUTE2 {sql_size}\r\n{operation}")
 
@@ -233,8 +226,8 @@ class Cursor():
         self.has_next = False
         self.is_initial_execution = False
         debug_start_time = time.time()
-
-        operation = self._check_semi(operation)
+        if not self._has_semicolon(operation):
+            operation += ";"
         sql_size = len(operation)
 
         self.socket.send_message(f"EXECUTE {sql_size}\r\n{operation}")
@@ -333,15 +326,15 @@ class Cursor():
         if not load_option.validate_csv and columns is None:
             raise DataError("-ERR column is not iterable type.\r\n")
 
+        self._set_field_sep(sep)
+        self._set_record_sep(record_sep)
+
         if columns:
             control_data = self.record_sep.join(columns)
             ctl_size = len(control_data)
         else:
             control_data = 'NULL'
             ctl_size = 4
-
-        self._set_field_sep(sep)
-        self._set_record_sep(record_sep)
 
         logger.debug(f"[DEBUG] GetSizeStart ({load_file_path})")
         data_size = os.path.getsize(load_file_path)
@@ -359,8 +352,11 @@ class Cursor():
                 if not buffer_data:
                     break #EOF
                 self.socket.send_message(buffer_data)
-
             logger.debug("[DEBUG] End (%s)" % load_file_path)
+
+        is_success, msg = self.socket.read_message()
+        if not is_success: 
+            raise ProgrammingError(msg)
 
 
     def close(self):
