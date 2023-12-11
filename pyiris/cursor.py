@@ -186,6 +186,9 @@ class Cursor():
     def execute(self, operation:str, args:Optional[Union[Sequence[Any], Dict[str,Any]]]=None) -> str:
         """
         Execute Query
+        
+        execute2와 같은 함수
+        기존 execute 함수는 execute1을 사용
 
         Params
         ------
@@ -221,8 +224,19 @@ class Cursor():
         logger.debug("[DEBUG_TIME] Execute2() %f" % (debug_end_time - debug_start_time))
 
         return msg
+    
+    
+    def execute2(self, operation:str, args:Optional[Union[Sequence[Any], Dict[str,Any]]]=None) -> str:
+        """
+        Use method execute
+        """
+        return self.execute(operation, args)
+    
 
     def execute1(self, operation:str) -> None:
+        """
+        기존 exeucte 함수
+        """
         self.has_next = False
         self.is_initial_execution = False
         debug_start_time = time.time()
